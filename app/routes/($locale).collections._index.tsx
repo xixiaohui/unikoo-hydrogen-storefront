@@ -3,13 +3,18 @@ import type {Route} from './+types/collections._index';
 import {getPaginationVariables, Image} from '@shopify/hydrogen';
 import type {CollectionFragment} from 'storefrontapi.generated';
 import {PaginatedResourceSection} from '~/components/PaginatedResourceSection';
+import {getBuyerVariables, type BuyerVariables} from '~/lib/buyer';
 
 export async function loader(args: Route.LoaderArgs) {
+  // B2B: resolve the buyer context so B2B customers only see the collections
+  // that belong to their company location catalog
+  const buyerVariables = await getBuyerVariables(args.context);
+
   // Start fetching non-critical data without blocking time to first byte
-  const deferredData = loadDeferredData(args);
+  const deferredData = loadDeferredData({...args, buyerVariables});
 
   // Await the critical data required to render initial state of the page
-  const criticalData = await loadCriticalData(args);
+  const criticalData = await loadCriticalData({...args, buyerVariables});
 
   return {...deferredData, ...criticalData};
 }
@@ -18,14 +23,18 @@ export async function loader(args: Route.LoaderArgs) {
  * Load data necessary for rendering content above the fold. This is the critical data
  * needed to render the page. If it's unavailable, the whole page should 400 or 500 error.
  */
-async function loadCriticalData({context, request}: Route.LoaderArgs) {
+async function loadCriticalData({
+  context,
+  request,
+  buyerVariables,
+}: Route.LoaderArgs & {buyerVariables: BuyerVariables}) {
   const paginationVariables = getPaginationVariables(request, {
     pageBy: 4,
   });
 
   const [{collections}] = await Promise.all([
     context.storefront.query(COLLECTIONS_QUERY, {
-      variables: paginationVariables,
+      variables: {...paginationVariables, ...buyerVariables},
     }),
     // Add other queries here, so that they are loaded in parallel
   ]);
@@ -38,7 +47,13 @@ async function loadCriticalData({context, request}: Route.LoaderArgs) {
  * fetched after the initial page load. If it's unavailable, the page should still 200.
  * Make sure to not throw any errors here, as it will cause the page to 500.
  */
-function loadDeferredData({context}: Route.LoaderArgs) {
+function loadDeferredData({
+  buyerVariables,
+}: Route.LoaderArgs & {buyerVariables: BuyerVariables}) {
+  // Put any API calls that is not critical to be available on first page render
+  // For example: product reviews, product recommendations, social feeds.
+  // Use `buyerVariables` for any product query so it stays in the buyer's catalog.
+
   return {};
 }
 
@@ -112,7 +127,8 @@ const COLLECTIONS_QUERY = `#graphql
     $language: LanguageCode
     $last: Int
     $startCursor: String
-  ) @inContext(country: $country, language: $language) {
+    $buyer: BuyerInput
+  ) @inContext(country: $country, language: $language, buyer: $buyer) {
     collections(
       first: $first,
       last: $last,

@@ -8,17 +8,22 @@ import type {
 } from 'storefrontapi.generated';
 import {ProductItem} from '~/components/ProductItem';
 import {MockShopNotice} from '~/components/MockShopNotice';
+import {getBuyerVariables, type BuyerVariables} from '~/lib/buyer';
 
 export const meta: Route.MetaFunction = () => {
   return [{title: 'Hydrogen | Home'}];
 };
 
 export async function loader(args: Route.LoaderArgs) {
+  // B2B: resolve the buyer context so product queries return the catalog of
+  // the customer's company location instead of the default catalog
+  const buyerVariables = await getBuyerVariables(args.context);
+
   // Start fetching non-critical data without blocking time to first byte
-  const deferredData = loadDeferredData(args);
+  const deferredData = loadDeferredData({...args, buyerVariables});
 
   // Await the critical data required to render initial state of the page
-  const criticalData = await loadCriticalData(args);
+  const criticalData = await loadCriticalData({...args, buyerVariables});
 
   return {...deferredData, ...criticalData};
 }
@@ -27,9 +32,14 @@ export async function loader(args: Route.LoaderArgs) {
  * Load data necessary for rendering content above the fold. This is the critical data
  * needed to render the page. If it's unavailable, the whole page should 400 or 500 error.
  */
-async function loadCriticalData({context}: Route.LoaderArgs) {
+async function loadCriticalData({
+  context,
+  buyerVariables,
+}: Route.LoaderArgs & {buyerVariables: BuyerVariables}) {
   const [{collections}] = await Promise.all([
-    context.storefront.query(FEATURED_COLLECTION_QUERY),
+    context.storefront.query(FEATURED_COLLECTION_QUERY, {
+      variables: {...buyerVariables},
+    }),
     // Add other queries here, so that they are loaded in parallel
   ]);
 
@@ -44,9 +54,12 @@ async function loadCriticalData({context}: Route.LoaderArgs) {
  * fetched after the initial page load. If it's unavailable, the page should still 200.
  * Make sure to not throw any errors here, as it will cause the page to 500.
  */
-function loadDeferredData({context}: Route.LoaderArgs) {
+function loadDeferredData({
+  context,
+  buyerVariables,
+}: Route.LoaderArgs & {buyerVariables: BuyerVariables}) {
   const recommendedProducts = context.storefront
-    .query(RECOMMENDED_PRODUCTS_QUERY)
+    .query(RECOMMENDED_PRODUCTS_QUERY, {variables: {...buyerVariables}})
     .catch((error: Error) => {
       // Log query errors, but don't throw them so the page can still render
       console.error(error);
@@ -137,8 +150,11 @@ const FEATURED_COLLECTION_QUERY = `#graphql
     }
     handle
   }
-  query FeaturedCollection($country: CountryCode, $language: LanguageCode)
-    @inContext(country: $country, language: $language) {
+  query FeaturedCollection(
+    $country: CountryCode
+    $language: LanguageCode
+    $buyer: BuyerInput
+  ) @inContext(country: $country, language: $language, buyer: $buyer) {
     collections(first: 1, sortKey: UPDATED_AT, reverse: true) {
       nodes {
         ...FeaturedCollection
@@ -166,8 +182,11 @@ const RECOMMENDED_PRODUCTS_QUERY = `#graphql
       height
     }
   }
-  query RecommendedProducts ($country: CountryCode, $language: LanguageCode)
-    @inContext(country: $country, language: $language) {
+  query RecommendedProducts(
+    $country: CountryCode
+    $language: LanguageCode
+    $buyer: BuyerInput
+  ) @inContext(country: $country, language: $language, buyer: $buyer) {
     products(first: 4, sortKey: UPDATED_AT, reverse: true) {
       nodes {
         ...RecommendedProduct

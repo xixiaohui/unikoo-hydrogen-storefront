@@ -14,16 +14,7 @@ import {ProductForm} from '~/components/ProductForm';
 import {redirectIfHandleIsLocalized} from '~/lib/redirect';
 import {QuantityRules, hasQuantityRules} from '~/components/QuantityRules';
 import {PriceBreaks} from '~/components/PriceBreaks';
-
-// B2B buyer variables type for contextualized queries
-type BuyerVariables =
-  | {
-      buyer: {
-        companyLocationId: string;
-        customerAccessToken: string;
-      };
-    }
-  | {};
+import {getBuyerVariables, type BuyerVariables} from '~/lib/buyer';
 
 export const meta: Route.MetaFunction = ({data}) => {
   return [
@@ -36,18 +27,9 @@ export const meta: Route.MetaFunction = ({data}) => {
 };
 
 export async function loader(args: Route.LoaderArgs) {
-  // Get B2B buyer context for contextualized product queries
-  const buyer = await args.context.customerAccount.getBuyer();
-
-  const buyerVariables: BuyerVariables =
-    buyer?.companyLocationId && buyer?.customerAccessToken
-      ? {
-          buyer: {
-            companyLocationId: buyer.companyLocationId,
-            customerAccessToken: buyer.customerAccessToken,
-          },
-        }
-      : {};
+  // B2B: contextualize the product query with the buyer's company location so
+  // the catalog price and availability are the B2B ones
+  const buyerVariables = await getBuyerVariables(args.context);
 
   // Start fetching non-critical data without blocking time to first byte
   const deferredData = loadDeferredData({...args, buyerVariables});

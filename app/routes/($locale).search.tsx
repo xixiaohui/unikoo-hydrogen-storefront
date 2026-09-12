@@ -12,6 +12,7 @@ import type {
   RegularSearchQuery,
   PredictiveSearchQuery,
 } from 'storefrontapi.generated';
+import {getBuyerVariables} from '~/lib/buyer';
 
 export const meta: Route.MetaFunction = () => {
   return [{title: `Hydrogen | Search`}];
@@ -161,7 +162,8 @@ export const SEARCH_QUERY = `#graphql
     $last: Int
     $term: String!
     $startCursor: String
-  ) @inContext(country: $country, language: $language) {
+    $buyer: BuyerInput
+  ) @inContext(country: $country, language: $language, buyer: $buyer) {
     articles: search(
       query: $term,
       types: [ARTICLE],
@@ -224,6 +226,9 @@ async function regularSearch({
   const url = new URL(request.url);
   const variables = getPaginationVariables(request, {pageBy: 8});
   const term = String(url.searchParams.get('q') || '');
+  // B2B: searches must be contextualized too, otherwise products from the
+  // default catalog are returned
+  const buyerVariables = await getBuyerVariables(context);
 
   // Search articles, pages, and products for the `q` term
   const {
@@ -231,7 +236,7 @@ async function regularSearch({
     ...items
   }: {errors?: Array<{message: string}>} & RegularSearchQuery =
     await storefront.query(SEARCH_QUERY, {
-      variables: {...variables, term},
+      variables: {...variables, term, ...buyerVariables},
     });
 
   if (!items) {
@@ -344,7 +349,8 @@ const PREDICTIVE_SEARCH_QUERY = `#graphql
     $limitScope: PredictiveSearchLimitScope!
     $term: String!
     $types: [PredictiveSearchType!]
-  ) @inContext(country: $country, language: $language) {
+    $buyer: BuyerInput
+  ) @inContext(country: $country, language: $language, buyer: $buyer) {
     predictiveSearch(
       limit: $limit,
       limitScope: $limitScope,
@@ -390,6 +396,8 @@ async function predictiveSearch({
   const term = String(url.searchParams.get('q') || '').trim();
   const limit = Number(url.searchParams.get('limit') || 10);
   const type = 'predictive';
+  // B2B: keep predictive search inside the buyer's catalog
+  const buyerVariables = await getBuyerVariables(context);
 
   if (!term) return {type, term, result: getEmptyPredictiveSearchResult()};
 
@@ -404,6 +412,7 @@ async function predictiveSearch({
         limit,
         limitScope: 'EACH',
         term,
+        ...buyerVariables,
       },
     });
 
