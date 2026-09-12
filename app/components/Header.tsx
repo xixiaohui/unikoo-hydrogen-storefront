@@ -7,6 +7,7 @@ import {
 } from '@shopify/hydrogen';
 import type {HeaderQuery, CartApiQueryFragment} from 'storefrontapi.generated';
 import {useAside} from '~/components/Aside';
+import {useB2BLocation} from './B2BLocationProvider';
 
 interface HeaderProps {
   header: HeaderQuery;
@@ -91,7 +92,20 @@ export function HeaderMenu({
           </NavLink>
         );
       })}
+      <ChangeLocation />
     </nav>
+  );
+}
+
+function ChangeLocation() {
+  const {company, setModalOpen} = useB2BLocation();
+
+  if (!company) return null;
+
+  return (
+    <button className="reset" onClick={() => setModalOpen(true)}>
+      Change location
+    </button>
   );
 }
 

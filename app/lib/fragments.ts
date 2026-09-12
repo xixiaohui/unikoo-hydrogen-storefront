@@ -52,6 +52,11 @@ export const CART_QUERY_FRAGMENT = `#graphql
           name
           value
         }
+        quantityRule {
+          maximum
+          minimum
+          increment
+        }
       }
     }
     parentRelationship {
@@ -106,6 +111,11 @@ export const CART_QUERY_FRAGMENT = `#graphql
         selectedOptions {
           name
           value
+        }
+        quantityRule {
+          maximum
+          minimum
+          increment
         }
       }
     }

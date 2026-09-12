@@ -17,8 +17,37 @@ import resetStyles from '~/styles/reset.css?url';
 import appStyles from '~/styles/app.css?url';
 import tailwindCss from './styles/tailwind.css?url';
 import {PageLayout} from './components/PageLayout';
+import {B2BLocationProvider} from '~/components/B2BLocationProvider';
+import {B2BLocationSelector} from '~/components/B2BLocationSelector';
+import type {
+  Company,
+  CompanyAddress,
+  CompanyLocation,
+  Maybe,
+} from '@shopify/hydrogen/customer-account-api-types';
 
 export type RootLoader = typeof loader;
+
+// B2B customer company types used across B2B components
+export type CustomerCompanyLocation = Pick<CompanyLocation, 'name' | 'id'> & {
+  shippingAddress?:
+    | Maybe<Pick<CompanyAddress, 'countryCode' | 'formattedAddress'>>
+    | undefined;
+};
+
+export type CustomerCompanyLocationConnection = {
+  node: CustomerCompanyLocation;
+};
+
+export type CustomerCompany =
+  | Maybe<
+      Pick<Company, 'name' | 'id'> & {
+        locations: {
+          edges: CustomerCompanyLocationConnection[];
+        };
+      }
+    >
+  | undefined;
 
 /**
  * This is important to avoid re-fetching root queries on sub-navigations
@@ -178,9 +207,12 @@ export default function App() {
       shop={data.shop}
       consent={data.consent}
     >
-      <PageLayout {...data}>
-        <Outlet />
-      </PageLayout>
+      <B2BLocationProvider>
+        <PageLayout {...data}>
+          <Outlet />
+        </PageLayout>
+        <B2BLocationSelector />
+      </B2BLocationProvider>
     </Analytics.Provider>
   );
 }
